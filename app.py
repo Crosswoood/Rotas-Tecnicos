@@ -5,19 +5,16 @@ from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
-# === Leitura do CSV com encoding e separador corretos ===
+# Leitura do CSV com encoding e separador corretos
 try:
     escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="utf-8", sep=';')
 except UnicodeDecodeError:
     escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="latin1", sep=';')
 
-# Padroniza nomes das colunas
 escolas_df.columns = escolas_df.columns.str.strip().str.lower()
 
-# Debug: mostrar colunas detectadas
 st.write("🔎 Colunas detectadas no CSV:", escolas_df.columns.tolist())
 
-# Verifica se colunas necessárias existem
 colunas_esperadas = ["cod_escola", "escola", "latitude", "longitude"]
 faltando = [col for col in colunas_esperadas if col not in escolas_df.columns]
 
@@ -25,7 +22,6 @@ if faltando:
     st.error(f"⚠️ Colunas ausentes no CSV: {faltando}")
     st.stop()
 
-# Renomear para padrão usado no código
 escolas_df = escolas_df.rename(columns={
     "cod_escola": "codigo",
     "escola": "nome"
@@ -35,10 +31,8 @@ escolas_df = escolas_df.rename(columns={
 escolas_df["latitude"] = escolas_df["latitude"].astype(str).str.replace(",", ".").astype(float)
 escolas_df["longitude"] = escolas_df["longitude"].astype(str).str.replace(",", ".").astype(float)
 
-# Criar coluna para exibição no dropdown
 escolas_df["exibir"] = escolas_df["codigo"].astype(str) + " - " + escolas_df["nome"]
 
-# === Interface Streamlit ===
 st.title("🚗 Roteirizador Automático de Técnicos")
 
 partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
@@ -46,6 +40,20 @@ destinos_exibir = st.multiselect("🎯 Escolas de destino", escolas_df["exibir"]
 
 num_carros = st.number_input("🚐 Número de carros disponíveis", min_value=1, max_value=5, value=1)
 capacidade = st.number_input("👥 Pessoas por carro", min_value=1, max_value=10, value=4)
+
+def create_distance_matrix(locations):
+    n = len(locations)
+    matrix = []
+    for i in range(n):
+        row = []
+        for j in range(n):
+            if i == j:
+                row.append(0)
+            else:
+                dist = int(geodesic(locations[i], locations[j]).meters)
+                row.append(dist)
+        matrix.append(row)
+    return matrix
 
 if st.button("🔄 Gerar rota"):
     if not destinos_exibir:
@@ -59,20 +67,6 @@ if st.button("🔄 Gerar rota"):
 
         destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].reset_index(drop=True)
         locations = list(zip(destinos_df["latitude"], destinos_df["longitude"]))
-
-        def create_distance_matrix(locations):
-            n = len(locations)
-            matrix = []
-            for i in range(n):
-                row = []
-                for j in range(n):
-                    if i == j:
-                        row.append(0)
-                    else:
-                        dist = int(geodesic(locations[i], locations[j]).meters)
-                        row.append(dist)
-                matrix.append(row)
-            return matrix
 
         distance_matrix = create_distance_matrix(locations)
 
@@ -122,6 +116,9 @@ if st.button("🔄 Gerar rota"):
                     nome_escola = destinos_df.iloc[i % len(destinos_df)]["nome"]
                     folium.Marker(coord, tooltip=f"Carro {vehicle_id+1} - {nome_escola}").add_to(mapa)
 
-            st_folium(mapa, height=600)
+            st.session_state["mapa"] = mapa
         else:
             st.error("❌ Não foi possível gerar a rota com os parâmetros fornecidos.")
+
+if "mapa" in st.session_state:
+    st_folium(st.session_state["mapa"], height=600)
