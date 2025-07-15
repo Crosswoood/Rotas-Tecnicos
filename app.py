@@ -6,7 +6,7 @@ from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
 # === Carregar dados das escolas ===
-escolas_df = pd.read_csv("escolas_com_coords.csv")
+escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv")
 
 # Criar coluna auxiliar para busca
 escolas_df["exibir"] = escolas_df["codigo"].astype(str) + " - " + escolas_df["nome"]
