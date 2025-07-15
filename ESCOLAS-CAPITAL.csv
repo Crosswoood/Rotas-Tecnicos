@@ -1,4 +1,4 @@
-cod_escola;escola;longitude;latitude
+ï»¿cod_escola;escola;longitude;latitude
 42;EE Balbina Mestrinho;-60,003059;-3,1276563
 44;EE Euclydes da Cunha;-60,00673187;-3,131362653
 47;EE Ruy Araujo;-60,006586;-3,1277331
@@ -18,7 +18,7 @@ cod_escola;escola;longitude;latitude
 174;EETI Governador Melo Povoas;-60,037506;-3,1178457
 1575;Ceja Profa. Jacira Caboclo;-60,02713;-3,12046
 7739;Ceja Prof. Paulo Freire;-60,026418;-3,1177066
-135;EE 1º de Maio;-60,011631;-3,1189783
+135;EE 1Âº de Maio;-60,011631;-3,1189783
 137;Colegio Militar da Policia Militar do Amazonas;-60,000416;-3,1189881
 138;EE Angelo Ramazzotti;-60,012622;-3,110644
 139;EE Getulio Vargas;-60,007282;-3,1161288
@@ -44,7 +44,7 @@ cod_escola;escola;longitude;latitude
 170;EE Antonio Bittencourt;-60,03697;-3,1231345
 171;EE Joanna Rodrigues Vieira;-60,037036;-3,1226276
 173;EETI Marques de Santa Cruz;-60,037796;-3,1282043
-175;EE Nª Sª da Gloria;-60,0366445;-3,1217903
+175;EE NÂª SÂª da Gloria;-60,0366445;-3,1217903
 176;EE Olavo Bilac;-60,035738;-3,1274637
 179;EE Sao Luiz de Gonzaga;-60,037831;-3,1272192
 35;EE Bom Pastor;-59,98969473;-3,133824983
@@ -134,7 +134,7 @@ cod_escola;escola;longitude;latitude
 11;EE Thome de Medeiros Raposo;-60,03761816;-3,050983718
 57;EE Giovanni Figliuolo;-60,033242;-2,9059933
 69;EE D. Milton Correa Pereira;-59,968081;-3,0353681
-70;EE Engº Arthur Amorim;-59,971872;-3,0467767
+70;EE EngÂº Arthur Amorim;-59,971872;-3,0467767
 71;EE Profa. Lenina Ferraro da Silva;-59,959982;-3,0215285
 73;EE Profa. Hilda de Azevedo Tribuzy;-59,982298;-3,0303916
 74;EE Sebastiao Noroes;-59,981274;-3,0191901
