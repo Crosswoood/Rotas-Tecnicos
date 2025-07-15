@@ -8,7 +8,15 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 # === Carregar dados das escolas ===
 escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv")
 
-# Criar coluna auxiliar para busca
+# Renomear colunas para nomes padrão esperados no código
+escolas_df = escolas_df.rename(columns={
+    "cod_escola": "codigo",
+    "escola": "nome",
+    "longitude": "longitude",
+    "latitude": "latitude"
+})
+
+# Criar coluna auxiliar para exibição no dropdown
 escolas_df["exibir"] = escolas_df["codigo"].astype(str) + " - " + escolas_df["nome"]
 
 # === Interface ===
