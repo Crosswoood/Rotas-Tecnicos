@@ -4,6 +4,7 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+from folium.features import DivIcon
 
 # Leitura do CSV com encoding e separador corretos
 try:
@@ -114,7 +115,15 @@ if st.button("🔄 Gerar rota"):
 
                 for i, coord in enumerate(rota):
                     nome_escola = destinos_df.iloc[i % len(destinos_df)]["nome"]
-                    folium.Marker(coord, tooltip=f"Carro {vehicle_id+1} - {nome_escola}").add_to(mapa)
+                    folium.Marker(
+                        location=coord,
+                        icon=DivIcon(
+                            icon_size=(30,30),
+                            icon_anchor=(15,15),
+                            html=f'<div style="font-size: 16pt; color : black; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{i}</div>'
+                        ),
+                        tooltip=f"Carro {vehicle_id+1} - {nome_escola}"
+                    ).add_to(mapa)
 
             st.session_state["mapa"] = mapa
         else:
