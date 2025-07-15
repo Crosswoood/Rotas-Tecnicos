@@ -5,19 +5,19 @@ from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
-# === Leitura segura do CSV com separador ';' ===
+# === Leitura do CSV com encoding e separador corretos ===
 try:
     escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="utf-8", sep=';')
 except UnicodeDecodeError:
     escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="latin1", sep=';')
 
-# Padronizar nomes de colunas
+# Padroniza nomes das colunas
 escolas_df.columns = escolas_df.columns.str.strip().str.lower()
 
+# Debug: mostrar colunas detectadas
 st.write("🔎 Colunas detectadas no CSV:", escolas_df.columns.tolist())
 
-# Ajuste esses nomes conforme seus cabeçalhos reais no CSV
-# Exemplo, supondo que as colunas sejam 'cod_escola', 'escola', 'latitude', 'longitude'
+# Verifica se colunas necessárias existem
 colunas_esperadas = ["cod_escola", "escola", "latitude", "longitude"]
 faltando = [col for col in colunas_esperadas if col not in escolas_df.columns]
 
@@ -25,13 +25,17 @@ if faltando:
     st.error(f"⚠️ Colunas ausentes no CSV: {faltando}")
     st.stop()
 
-# Renomear colunas para padrão interno
+# Renomear para padrão usado no código
 escolas_df = escolas_df.rename(columns={
     "cod_escola": "codigo",
     "escola": "nome"
 })
 
-# Criar coluna para exibir no dropdown
+# Corrigir vírgulas decimais e converter para float
+escolas_df["latitude"] = escolas_df["latitude"].astype(str).str.replace(",", ".").astype(float)
+escolas_df["longitude"] = escolas_df["longitude"].astype(str).str.replace(",", ".").astype(float)
+
+# Criar coluna para exibição no dropdown
 escolas_df["exibir"] = escolas_df["codigo"].astype(str) + " - " + escolas_df["nome"]
 
 # === Interface Streamlit ===
@@ -110,7 +114,7 @@ if st.button("🔄 Gerar rota"):
                     coord = locations[node_index]
                     rota.append(coord)
                     index = solution.Value(routing.NextVar(index))
-                rota.append(locations[0])
+                rota.append(locations[0])  # volta ao início
 
                 folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
 
@@ -119,6 +123,5 @@ if st.button("🔄 Gerar rota"):
                     folium.Marker(coord, tooltip=f"Carro {vehicle_id+1} - {nome_escola}").add_to(mapa)
 
             st_folium(mapa, height=600)
-
         else:
             st.error("❌ Não foi possível gerar a rota com os parâmetros fornecidos.")
