@@ -5,21 +5,32 @@ from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
-# === Carregar dados das escolas ===
-escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv")
+# === Leitura segura do CSV ===
+try:
+    escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="utf-8")
+except UnicodeDecodeError:
+    escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="latin1")
 
-# Renomear colunas para nomes padrão esperados no código
+# === Padronização dos nomes de coluna ===
+escolas_df.columns = escolas_df.columns.str.strip().str.lower()
+
+# Verificação de colunas essenciais
+colunas_esperadas = ["cod_escola", "escola", "latitude", "longitude"]
+colunas_faltando = [col for col in colunas_esperadas if col not in escolas_df.columns]
+if colunas_faltando:
+    st.error(f"⚠️ Colunas ausentes no CSV: {colunas_faltando}")
+    st.stop()
+
+# Renomear para nomes padrão usados no código
 escolas_df = escolas_df.rename(columns={
     "cod_escola": "codigo",
-    "escola": "nome",
-    "longitude": "longitude",
-    "latitude": "latitude"
+    "escola": "nome"
 })
 
-# Criar coluna auxiliar para exibição no dropdown
+# Criar campo para exibição na interface
 escolas_df["exibir"] = escolas_df["codigo"].astype(str) + " - " + escolas_df["nome"]
 
-# === Interface ===
+# === Interface Streamlit ===
 st.title("🚗 Roteirizador Automático de Técnicos")
 
 partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
@@ -59,7 +70,7 @@ if st.button("🔄 Gerar rota"):
 
         distance_matrix = create_distance_matrix(locations)
 
-        # === Configurar OR-Tools ===
+        # === OR-Tools ===
         manager = pywrapcp.RoutingIndexManager(len(distance_matrix), num_carros, 0)
         routing = pywrapcp.RoutingModel(manager)
 
@@ -71,7 +82,7 @@ if st.button("🔄 Gerar rota"):
         transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-        # Capacidade de veículos
+        # Capacidade dos veículos
         demands = [1] * len(distance_matrix)
         vehicle_capacities = [capacidade] * num_carros
         demand_callback_index = routing.RegisterUnaryTransitCallback(lambda idx: demands[manager.IndexToNode(idx)])
@@ -80,7 +91,7 @@ if st.button("🔄 Gerar rota"):
             0, vehicle_capacities, True, "Capacity"
         )
 
-        # Parâmetros de busca
+        # Estratégia de roteamento
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
         search_parameters.first_solution_strategy = (
             routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -88,7 +99,7 @@ if st.button("🔄 Gerar rota"):
 
         solution = routing.SolveWithParameters(search_parameters)
 
-        # === Exibir solução ===
+        # === Exibir resultado ===
         if solution:
             st.success("✅ Rota gerada com sucesso!")
 
@@ -103,7 +114,7 @@ if st.button("🔄 Gerar rota"):
                     coord = locations[node_index]
                     rota.append(coord)
                     index = solution.Value(routing.NextVar(index))
-                rota.append(locations[0])  # retorna ao início
+                rota.append(locations[0])  # volta ao início
 
                 folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
 
@@ -114,4 +125,4 @@ if st.button("🔄 Gerar rota"):
             st_folium(mapa, height=600)
 
         else:
-            st.error("❌ Não foi possível encontrar uma rota com os parâmetros informados.")
+            st.error("❌ Não foi possível gerar a rota com os parâmetros fornecidos.")
