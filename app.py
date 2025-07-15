@@ -5,29 +5,33 @@ from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
-# === Leitura segura do CSV ===
+# === Leitura segura do CSV com separador ';' ===
 try:
-    escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="utf-8")
+    escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="utf-8", sep=';')
 except UnicodeDecodeError:
-    escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="latin1")
+    escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="latin1", sep=';')
 
-# === Padronização dos nomes de coluna ===
+# Padronizar nomes de colunas
 escolas_df.columns = escolas_df.columns.str.strip().str.lower()
 
-# Verificação de colunas essenciais
+st.write("🔎 Colunas detectadas no CSV:", escolas_df.columns.tolist())
+
+# Ajuste esses nomes conforme seus cabeçalhos reais no CSV
+# Exemplo, supondo que as colunas sejam 'cod_escola', 'escola', 'latitude', 'longitude'
 colunas_esperadas = ["cod_escola", "escola", "latitude", "longitude"]
-colunas_faltando = [col for col in colunas_esperadas if col not in escolas_df.columns]
-if colunas_faltando:
-    st.error(f"⚠️ Colunas ausentes no CSV: {colunas_faltando}")
+faltando = [col for col in colunas_esperadas if col not in escolas_df.columns]
+
+if faltando:
+    st.error(f"⚠️ Colunas ausentes no CSV: {faltando}")
     st.stop()
 
-# Renomear para nomes padrão usados no código
+# Renomear colunas para padrão interno
 escolas_df = escolas_df.rename(columns={
     "cod_escola": "codigo",
     "escola": "nome"
 })
 
-# Criar campo para exibição na interface
+# Criar coluna para exibir no dropdown
 escolas_df["exibir"] = escolas_df["codigo"].astype(str) + " - " + escolas_df["nome"]
 
 # === Interface Streamlit ===
@@ -43,7 +47,6 @@ if st.button("🔄 Gerar rota"):
     if not destinos_exibir:
         st.warning("Você precisa selecionar ao menos um destino.")
     else:
-        # === Preparar os dados ===
         partida_codigo = int(partida_exibir.split(" - ")[0])
         destinos_codigos = [int(item.split(" - ")[0]) for item in destinos_exibir]
 
@@ -53,7 +56,6 @@ if st.button("🔄 Gerar rota"):
         destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].reset_index(drop=True)
         locations = list(zip(destinos_df["latitude"], destinos_df["longitude"]))
 
-        # === Criar matriz de distância ===
         def create_distance_matrix(locations):
             n = len(locations)
             matrix = []
@@ -70,7 +72,6 @@ if st.button("🔄 Gerar rota"):
 
         distance_matrix = create_distance_matrix(locations)
 
-        # === OR-Tools ===
         manager = pywrapcp.RoutingIndexManager(len(distance_matrix), num_carros, 0)
         routing = pywrapcp.RoutingModel(manager)
 
@@ -82,7 +83,6 @@ if st.button("🔄 Gerar rota"):
         transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-        # Capacidade dos veículos
         demands = [1] * len(distance_matrix)
         vehicle_capacities = [capacidade] * num_carros
         demand_callback_index = routing.RegisterUnaryTransitCallback(lambda idx: demands[manager.IndexToNode(idx)])
@@ -91,15 +91,11 @@ if st.button("🔄 Gerar rota"):
             0, vehicle_capacities, True, "Capacity"
         )
 
-        # Estratégia de roteamento
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-        search_parameters.first_solution_strategy = (
-            routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
-        )
+        search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
 
         solution = routing.SolveWithParameters(search_parameters)
 
-        # === Exibir resultado ===
         if solution:
             st.success("✅ Rota gerada com sucesso!")
 
@@ -114,7 +110,7 @@ if st.button("🔄 Gerar rota"):
                     coord = locations[node_index]
                     rota.append(coord)
                     index = solution.Value(routing.NextVar(index))
-                rota.append(locations[0])  # volta ao início
+                rota.append(locations[0])
 
                 folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
 
