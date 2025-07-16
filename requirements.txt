@@ -3,7 +3,6 @@ txt
 streamlit
 pandas
 folium
-streamlit-folium
-geopy
-ortools
 openrouteservice
+geopy
+scikit-learn
