@@ -6,6 +6,7 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from folium.features import DivIcon
 import tempfile
 import os
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Rotas Automáticas")
 
@@ -125,7 +126,7 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
         st.session_state["mapa_html_path"] = tmpfile.name
 
     st.session_state["mostrar_mapa"] = True
-    st.success("✅ Rota gerada com sucesso! Clique abaixo para visualizar o mapa.")
+    st.success("✅ Rota gerada com sucesso! Veja abaixo o mapa interativo.")
 
 if gerar:
     if not destinos_exibir:
@@ -134,7 +135,8 @@ if gerar:
         gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade)
 
 if st.session_state["mostrar_mapa"] and st.session_state["mapa_html_path"] is not None:
-    map_url = f'file://{os.path.abspath(st.session_state["mapa_html_path"])}'
-    st.markdown(f"[🗺️ Clique aqui para abrir o mapa em nova aba]({map_url})", unsafe_allow_html=True)
+    with open(st.session_state["mapa_html_path"], 'r', encoding='utf-8') as f:
+        mapa_html = f.read()
+    components.html(mapa_html, height=600, scrolling=True)
 else:
     map_placeholder.write("Mapa será exibido aqui após gerar a rota.")
