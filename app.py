@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import folium
-from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from folium.features import DivIcon
+import tempfile
+import os
 
 st.set_page_config(page_title="Rotas Automáticas")
 
@@ -31,8 +32,8 @@ def create_distance_matrix(locations):
 
 if "mostrar_mapa" not in st.session_state:
     st.session_state["mostrar_mapa"] = False
-if "mapa" not in st.session_state:
-    st.session_state["mapa"] = None
+if "mapa_html_path" not in st.session_state:
+    st.session_state["mapa_html_path"] = None
 
 # Carregar dados
 escolas_df = carregar_escolas("ESCOLAS-CAPITAL.csv")
@@ -119,9 +120,12 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
                 tooltip=f"Carro {vehicle_id+1} - {nome_escola}"
             ).add_to(mapa)
 
-    st.session_state["mapa"] = mapa
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".html", dir=".") as tmpfile:
+        mapa.save(tmpfile.name)
+        st.session_state["mapa_html_path"] = tmpfile.name
+
     st.session_state["mostrar_mapa"] = True
-    st.success("✅ Rota gerada com sucesso!")
+    st.success("✅ Rota gerada com sucesso! Clique abaixo para visualizar o mapa.")
 
 if gerar:
     if not destinos_exibir:
@@ -129,8 +133,8 @@ if gerar:
     else:
         gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade)
 
-if st.session_state["mostrar_mapa"] and st.session_state["mapa"] is not None:
-    with map_placeholder:
-        st_folium(st.session_state["mapa"], height=600)
+if st.session_state["mostrar_mapa"] and st.session_state["mapa_html_path"] is not None:
+    map_url = f'file://{os.path.abspath(st.session_state["mapa_html_path"])}'
+    st.markdown(f"[🗺️ Clique aqui para abrir o mapa em nova aba]({map_url})", unsafe_allow_html=True)
 else:
     map_placeholder.write("Mapa será exibido aqui após gerar a rota.")
