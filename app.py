@@ -64,4 +64,4 @@ if st.button("🔄 Gerar rota"):
         st.warning("Você precisa selecionar ao menos um destino.")
     else:
         partida_codigo = int(partida_exibir.split(" - ")[0])
-        destinos_codigos = [int(item.split(" - ")[0]) for item
+        destinos_codigos = [int(item.split(" - ")[0]) for item]
