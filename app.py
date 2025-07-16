@@ -10,8 +10,8 @@ import math
 
 st.set_page_config(page_title="🗺️ Rotas Automáticas")
 
-# Chave salva simples no Streamlit secrets:
-api_key = st.secrets["ors_api_key"]
+# Chave salva no Streamlit secrets:
+api_key = st.secrets["ors_api_key"]["key"]
 
 @st.cache_data
 def carregar_escolas(caminho_csv):
