@@ -37,12 +37,12 @@ if "mapa" not in st.session_state:
 # Carregar dados
 escolas_df = carregar_escolas("ESCOLAS-CAPITAL.csv")
 
-st.title("🗺️ Rotas Automáticas")
+st.title("📍 Rotas Automáticas")
 
 with st.form("roteirizador"):
     partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
-    destinos_exibir = st.multiselect("🎯 Escolas de destino", escolas_df["exibir"].tolist())
-    num_carros = st.number_input("🚐 Número de carros disponíveis", min_value=1, max_value=10, value=1)
+    destinos_exibir = st.multiselect("🌟 Escolas de destino", escolas_df["exibir"].tolist())
+    num_carros = st.number_input("🚘 Número de carros disponíveis", min_value=1, max_value=10, value=1)
     capacidade = st.number_input("👥 Pessoas por carro (incluindo motorista)", min_value=1, max_value=10, value=4)
     gerar = st.form_submit_button("🔄 Gerar rota")
 
@@ -81,45 +81,45 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
 
     solution = routing.SolveWithParameters(search_parameters)
 
-    if solution:
-        mapa = folium.Map(location=locations[0], zoom_start=13)
-        cores = ["red", "blue", "green", "purple", "orange", "darkred", "cadetblue", "darkgreen", "orange", "black"]
+    if not solution:
+        st.error("❌ O OR-Tools não conseguiu encontrar uma solução viável para os parâmetros fornecidos.")
+        st.session_state["mostrar_mapa"] = False
+        st.stop()
 
-        for vehicle_id in range(num_carros):
-            index = routing.Start(vehicle_id)
-            rota = []
-            ordem_pontos = []
-            while not routing.IsEnd(index):
-                node_index = manager.IndexToNode(index)
-                rota.append(locations[node_index])
-                ordem_pontos.append(node_index)
-                index = solution.Value(routing.NextVar(index))
+    mapa = folium.Map(location=locations[0], zoom_start=13)
+    cores = ["red", "blue", "green", "purple", "orange", "darkred", "cadetblue", "darkgreen", "orange", "black"]
 
+    for vehicle_id in range(num_carros):
+        index = routing.Start(vehicle_id)
+        rota = []
+        ordem_pontos = []
+        while not routing.IsEnd(index):
             node_index = manager.IndexToNode(index)
             rota.append(locations[node_index])
             ordem_pontos.append(node_index)
+            index = solution.Value(routing.NextVar(index))
+        node_index = manager.IndexToNode(index)
+        rota.append(locations[node_index])
+        ordem_pontos.append(node_index)
 
-            folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
+        folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
 
-            for i, idx in enumerate(ordem_pontos):
-                coord = locations[idx]
-                nome_escola = destinos_df.iloc[idx]["nome"]
-                folium.Marker(
-                    location=coord,
-                    icon=DivIcon(
-                        icon_size=(30, 30),
-                        icon_anchor=(15, 15),
-                        html=f'<div style="font-size: 16pt; color: black; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{i}</div>'
-                    ),
-                    tooltip=f"Carro {vehicle_id+1} - {nome_escola}"
-                ).add_to(mapa)
+        for i, idx in enumerate(ordem_pontos):
+            coord = locations[idx]
+            nome_escola = destinos_df.iloc[idx]["nome"]
+            folium.Marker(
+                location=coord,
+                icon=DivIcon(
+                    icon_size=(30, 30),
+                    icon_anchor=(15, 15),
+                    html=f'<div style="font-size: 16pt; color: black; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{i}</div>'
+                ),
+                tooltip=f"Carro {vehicle_id+1} - {nome_escola}"
+            ).add_to(mapa)
 
-        st.session_state["mapa"] = mapa
-        st.session_state["mostrar_mapa"] = True
-        st.success("✅ Rota gerada com sucesso!")
-    else:
-        st.session_state["mostrar_mapa"] = False
-        st.error("❌ Não foi possível gerar a rota com os parâmetros fornecidos.")
+    st.session_state["mapa"] = mapa
+    st.session_state["mostrar_mapa"] = True
+    st.success("✅ Rota gerada com sucesso!")
 
 if gerar:
     if not destinos_exibir:
