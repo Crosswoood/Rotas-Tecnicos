@@ -37,7 +37,7 @@ if "mapa_html_path" not in st.session_state:
 
 escolas_df = carregar_escolas("ESCOLAS-CAPITAL.csv")
 
-st.title("📍 Rotas Automáticas")
+st.title("🗺️ Rotas Automáticas")
 
 map_placeholder = st.empty()
 
