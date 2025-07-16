@@ -12,7 +12,7 @@ st.set_page_config(page_title="Rotas Automáticas")
 def carregar_escolas(caminho_csv):
     df = pd.read_csv(caminho_csv, encoding="latin1", sep=";")
     df.columns = df.columns.str.strip().str.lower()
-    df = df.rename(columns={"codigo": "codigo", "escola": "nome"})
+    df = df.rename(columns={"inep": "codigo", "escola": "nome"})
     df["latitude"] = df["latitude"].astype(str).str.replace(",", ".").astype(float)
     df["longitude"] = df["longitude"].astype(str).str.replace(",", ".").astype(float)
     df["exibir"] = df["codigo"].astype(str) + " - " + df["nome"]
@@ -44,14 +44,16 @@ st.title("🗺️ Rotas Automáticas")
 with st.form("roteirizador"):
     partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
     destinos_exibir = st.multiselect("🎯 Escolas de destino", escolas_df["exibir"].tolist())
-    num_carros = st.number_input("🚐 Número de carros disponíveis", min_value=1, max_value=5, value=1)
-    capacidade = st.number_input("👥 Pessoas por carro", min_value=1, max_value=10, value=4)
+    num_carros = st.number_input("🚐 Número de carros disponíveis", min_value=1, max_value=10, value=1)
+    capacidade = st.number_input("👥 Pessoas por carro (incluindo motorista)", min_value=1, max_value=10, value=4)
     gerar = st.form_submit_button("🔄 Gerar rota")
 
 def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
+    # Extrai os códigos das escolas selecionadas
     partida_codigo = int(partida_exibir.split(" - ")[0])
     destinos_codigos = [int(item.split(" - ")[0]) for item in destinos_exibir]
 
+    # Garante que o ponto de partida esteja na lista dos destinos
     if partida_codigo not in destinos_codigos:
         destinos_codigos.insert(0, partida_codigo)
 
@@ -71,8 +73,10 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
+    # Cada destino demanda 1 pessoa (técnico) que ficará lá (inclui motorista)
     demands = [1] * len(distance_matrix)
     vehicle_capacities = [capacidade] * num_carros
+
     demand_callback_index = routing.RegisterUnaryTransitCallback(lambda idx: demands[manager.IndexToNode(idx)])
     routing.AddDimensionWithVehicleCapacity(
         demand_callback_index, 0, vehicle_capacities, True, "Capacity"
@@ -85,7 +89,7 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
 
     if solution:
         mapa = folium.Map(location=locations[0], zoom_start=13)
-        cores = ["red", "blue", "green", "purple", "orange"]
+        cores = ["red", "blue", "green", "purple", "orange", "darkred", "cadetblue", "darkgreen", "orange", "black"]
 
         for vehicle_id in range(num_carros):
             index = routing.Start(vehicle_id)
@@ -96,7 +100,11 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
                 rota.append(locations[node_index])
                 ordem_pontos.append(node_index)
                 index = solution.Value(routing.NextVar(index))
-            rota.append(locations[0])
+
+            # Adiciona o último ponto da rota (fim)
+            node_index = manager.IndexToNode(index)
+            rota.append(locations[node_index])
+            ordem_pontos.append(node_index)
 
             folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
 
@@ -108,7 +116,7 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
                     icon=DivIcon(
                         icon_size=(30, 30),
                         icon_anchor=(15, 15),
-                        html=f'<div style="font-size: 16pt; color : black; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{i}</div>'
+                        html=f'<div style="font-size: 16pt; color: black; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{i}</div>'
                     ),
                     tooltip=f"Carro {vehicle_id+1} - {nome_escola}"
                 ).add_to(mapa)
@@ -126,8 +134,7 @@ if gerar:
     else:
         gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade)
 
-mapa_placeholder = st.empty()
 if st.session_state["mostrar_mapa"] and st.session_state["mapa"] is not None:
     st_folium(st.session_state["mapa"], height=600)
 else:
-    mapa_placeholder.write("Mapa será exibido aqui após gerar a rota.")
+    st.write("Mapa será exibido aqui após gerar a rota.")
