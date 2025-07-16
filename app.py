@@ -39,6 +39,8 @@ escolas_df = carregar_escolas("ESCOLAS-CAPITAL.csv")
 
 st.title("📍 Rotas Automáticas")
 
+map_placeholder = st.empty()
+
 with st.form("roteirizador"):
     partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
     destinos_exibir = st.multiselect("🌟 Escolas de destino", escolas_df["exibir"].tolist())
@@ -128,6 +130,7 @@ if gerar:
         gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade)
 
 if st.session_state["mostrar_mapa"] and st.session_state["mapa"] is not None:
-    st_folium(st.session_state["mapa"], height=600)
+    with map_placeholder:
+        st_folium(st.session_state["mapa"], height=600)
 else:
-    st.write("Mapa será exibido aqui após gerar a rota.")
+    map_placeholder.write("Mapa será exibido aqui após gerar a rota.")
