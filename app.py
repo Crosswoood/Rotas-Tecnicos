@@ -2,15 +2,13 @@ import streamlit as st
 import pandas as pd
 import folium
 import openrouteservice
-from openrouteservice import convert
 from folium.features import DivIcon
 import tempfile
 import streamlit.components.v1 as components
-import math
 
 st.set_page_config(page_title="🗺️ Rotas Automáticas")
 
-# Chave salva no Streamlit secrets:
+# Pega a chave da API do ORS do secrets do Streamlit (seção com chave)
 api_key = st.secrets["ors_api_key"]["key"]
 
 @st.cache_data
@@ -41,7 +39,6 @@ with st.form("roteirizador"):
     gerar = st.form_submit_button("🔄 Gerar rota")
 
 def dividir_destinos(destinos, n):
-    """Divide a lista destinos em n grupos o mais equilibrado possível."""
     grupos = [[] for _ in range(n)]
     for i, destino in enumerate(destinos):
         grupos[i % n].append(destino)
@@ -60,13 +57,20 @@ def gerar_rotas_multicarro(partida_exibir, destinos_exibir, num_carros, capacida
         st.error("❌ Selecione ao menos um destino além do ponto de partida.")
         return
 
-    # Divide destinos entre os carros
     destinos_por_carro = dividir_destinos(destinos_codigos, num_carros)
 
-    # Criar mapa folium centralizado no ponto de partida
     partida_lng = escolas_df.loc[escolas_df["codigo"] == partida_codigo, "longitude"].values[0]
     partida_lat = escolas_df.loc[escolas_df["codigo"] == partida_codigo, "latitude"].values[0]
     mapa = folium.Map(location=[partida_lat, partida_lng], zoom_start=13)
+
+    # Camada Satélite Esri
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr='Esri',
+        name='Satélite',
+        overlay=False,
+        control=True
+    ).add_to(mapa)
 
     cores = [
         "blue", "green", "red", "purple", "orange", "darkred", "lightred",
@@ -77,11 +81,9 @@ def gerar_rotas_multicarro(partida_exibir, destinos_exibir, num_carros, capacida
         if not destinos_carro:
             continue
 
-        # Coordenadas do carro: ponto de partida + destinos dele
         rota_codigos = [partida_codigo] + destinos_carro
         rota_df = escolas_df[escolas_df["codigo"].isin(rota_codigos)].copy().reset_index(drop=True)
 
-        # Ordena para garantir partida na primeira posição
         rota_df.sort_values(by="codigo", key=lambda x: x == partida_codigo, ascending=False, inplace=True)
         rota_df.reset_index(drop=True, inplace=True)
 
@@ -98,14 +100,12 @@ def gerar_rotas_multicarro(partida_exibir, destinos_exibir, num_carros, capacida
             st.error(f"Erro ao solicitar rota para Carro {i+1}: {e}")
             continue
 
-        # Adiciona rota ao mapa com cor diferenciada
         folium.GeoJson(
             rota,
             name=f"Rota Carro {i+1}",
             style_function=lambda x, cor=cores[i % len(cores)]: {"color": cor, "weight": 5, "opacity": 0.7}
         ).add_to(mapa)
 
-        # Marca os pontos com número sequencial
         for idx, row in rota_df.iterrows():
             folium.Marker(
                 location=(row["latitude"], row["longitude"]),
