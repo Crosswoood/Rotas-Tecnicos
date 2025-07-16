@@ -8,18 +8,16 @@ from folium.features import DivIcon
 
 st.set_page_config(page_title="Rotas Automáticas")
 
-# Cache para carregar o CSV
 @st.cache_data
 def carregar_escolas(caminho_csv):
     df = pd.read_csv(caminho_csv, encoding="latin1", sep=";")
     df.columns = df.columns.str.strip().str.lower()
-    df = df.rename(columns={"inep": "codigo", "escola": "nome"})
+    df = df.rename(columns={"codigo": "codigo", "escola": "nome"})
     df["latitude"] = df["latitude"].astype(str).str.replace(",", ".").astype(float)
     df["longitude"] = df["longitude"].astype(str).str.replace(",", ".").astype(float)
     df["exibir"] = df["codigo"].astype(str) + " - " + df["nome"]
     return df
 
-# Cache para matriz de distância
 @st.cache_data
 def create_distance_matrix(locations):
     n = len(locations)
@@ -32,20 +30,16 @@ def create_distance_matrix(locations):
         matrix.append(row)
     return matrix
 
+# Inicializa session_state para mapa e flag de exibição
+if "mostrar_mapa" not in st.session_state:
+    st.session_state["mostrar_mapa"] = False
+if "mapa" not in st.session_state:
+    st.session_state["mapa"] = None
+
 # Carregar dados
 escolas_df = carregar_escolas("ESCOLAS-CAPITAL.csv")
 
-# Verificar colunas essenciais
-colunas_esperadas = ["codigo", "nome", "latitude", "longitude"]
-faltando = [col for col in colunas_esperadas if col not in escolas_df.columns]
-if faltando:
-    st.error(f"⚠️ Colunas ausentes no CSV: {faltando}")
-    st.stop()
-
 st.title("🗺️ Rotas Automáticas")
-
-if "mostrar_mapa" not in st.session_state:
-    st.session_state["mostrar_mapa"] = False
 
 with st.form("roteirizador"):
     partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
@@ -64,7 +58,7 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
     destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].reset_index(drop=True)
     locations = list(zip(destinos_df["latitude"], destinos_df["longitude"]))
 
-    distance_matrix = create_distance_matrix(tuple(locations))  # convert list to tuple for caching
+    distance_matrix = create_distance_matrix(tuple(locations))  # tupla para cache
 
     manager = pywrapcp.RoutingIndexManager(len(distance_matrix), num_carros, 0)
     routing = pywrapcp.RoutingModel(manager)
@@ -123,8 +117,8 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
         st.session_state["mostrar_mapa"] = True
         st.success("✅ Rota gerada com sucesso!")
     else:
-        st.error("❌ Não foi possível gerar a rota com os parâmetros fornecidos.")
         st.session_state["mostrar_mapa"] = False
+        st.error("❌ Não foi possível gerar a rota com os parâmetros fornecidos.")
 
 if gerar:
     if not destinos_exibir:
@@ -132,5 +126,8 @@ if gerar:
     else:
         gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade)
 
-if st.session_state.get("mostrar_mapa", False):
+mapa_placeholder = st.empty()
+if st.session_state["mostrar_mapa"] and st.session_state["mapa"] is not None:
     st_folium(st.session_state["mapa"], height=600)
+else:
+    mapa_placeholder.write("Mapa será exibido aqui após gerar a rota.")
