@@ -5,7 +5,6 @@ from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from folium.features import DivIcon
 import tempfile
-import os
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Rotas Automáticas")
@@ -52,16 +51,21 @@ with st.form("roteirizador"):
 
 def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
     partida_codigo = int(partida_exibir.split(" - ")[0])
-    destinos_codigos = [int(item.split(" - ")[0]) for item in destinos_exibir]
+    destinos_codigos = [int(item.split(" - ")[0]) for item in destinos_exibir if int(item.split(" - ")[0]) != partida_codigo]
 
-    if partida_codigo not in destinos_codigos:
-        destinos_codigos.insert(0, partida_codigo)
+    # Criar DataFrame com ponto de partida + destinos (sem repetir partida)
+    df_partida = escolas_df[escolas_df["codigo"] == partida_codigo]
+    df_destinos = escolas_df[escolas_df["codigo"].isin(destinos_codigos)]
+    destinos_df = pd.concat([df_partida, df_destinos], ignore_index=True)
 
-    destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].reset_index(drop=True)
+    # Garantir que o ponto de partida esteja na posição 0
+    destinos_df = destinos_df.reset_index(drop=True)
     locations = list(zip(destinos_df["latitude"], destinos_df["longitude"]))
     distance_matrix = create_distance_matrix(tuple(locations))
 
-    manager = pywrapcp.RoutingIndexManager(len(distance_matrix), num_carros, 0)
+    # Configuração do OR-Tools para iniciar no ponto de partida (index 0)
+    start_index = 0
+    manager = pywrapcp.RoutingIndexManager(len(distance_matrix), num_carros, start_index)
     routing = pywrapcp.RoutingModel(manager)
 
     def distance_callback(from_index, to_index):
@@ -73,6 +77,7 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
     demands = [1] * len(distance_matrix)
+    demands[0] = 0  # ponto de partida não conta como demanda
     vehicle_capacities = [capacidade] * num_carros
 
     demand_callback_index = routing.RegisterUnaryTransitCallback(lambda idx: demands[manager.IndexToNode(idx)])
