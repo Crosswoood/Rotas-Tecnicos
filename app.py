@@ -12,7 +12,6 @@ st.set_page_config(page_title="Rotas Automáticas")
 def carregar_escolas(caminho_csv):
     df = pd.read_csv(caminho_csv, encoding="latin1", sep=";")
     df.columns = df.columns.str.strip().str.lower()
-    df = df.rename(columns={"inep": "codigo", "escola": "nome"})
     df["latitude"] = df["latitude"].astype(str).str.replace(",", ".").astype(float)
     df["longitude"] = df["longitude"].astype(str).str.replace(",", ".").astype(float)
     df["exibir"] = df["codigo"].astype(str) + " - " + df["nome"]
@@ -30,7 +29,6 @@ def create_distance_matrix(locations):
         matrix.append(row)
     return matrix
 
-# Inicializa session_state para mapa e flag de exibição
 if "mostrar_mapa" not in st.session_state:
     st.session_state["mostrar_mapa"] = False
 if "mapa" not in st.session_state:
@@ -49,18 +47,15 @@ with st.form("roteirizador"):
     gerar = st.form_submit_button("🔄 Gerar rota")
 
 def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
-    # Extrai os códigos das escolas selecionadas
     partida_codigo = int(partida_exibir.split(" - ")[0])
     destinos_codigos = [int(item.split(" - ")[0]) for item in destinos_exibir]
 
-    # Garante que o ponto de partida esteja na lista dos destinos
     if partida_codigo not in destinos_codigos:
         destinos_codigos.insert(0, partida_codigo)
 
     destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].reset_index(drop=True)
     locations = list(zip(destinos_df["latitude"], destinos_df["longitude"]))
-
-    distance_matrix = create_distance_matrix(tuple(locations))  # tupla para cache
+    distance_matrix = create_distance_matrix(tuple(locations))
 
     manager = pywrapcp.RoutingIndexManager(len(distance_matrix), num_carros, 0)
     routing = pywrapcp.RoutingModel(manager)
@@ -73,7 +68,6 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    # Cada destino demanda 1 pessoa (técnico) que ficará lá (inclui motorista)
     demands = [1] * len(distance_matrix)
     vehicle_capacities = [capacidade] * num_carros
 
@@ -101,7 +95,6 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
                 ordem_pontos.append(node_index)
                 index = solution.Value(routing.NextVar(index))
 
-            # Adiciona o último ponto da rota (fim)
             node_index = manager.IndexToNode(index)
             rota.append(locations[node_index])
             ordem_pontos.append(node_index)
