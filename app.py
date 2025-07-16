@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="🗺️ Rotas Automáticas")
 
-# Chave da API ORS salva no secrets com seção [ors_api_key] e key = "..."
+# Lê a chave da API do secrets com seção [ors_api_key]
 api_key = st.secrets["ors_api_key"]["key"]
 
 @st.cache_data
@@ -107,17 +107,21 @@ def gerar_rotas_multicarro(partida_exibir, destinos_exibir, num_carros, capacida
             style_function=lambda x, cor=cores[i % len(cores)]: {"color": cor, "weight": 5, "opacity": 0.7}
         ).add_to(mapa)
 
-        # Extrai coordenadas para as setas (inverter lat/lng para folium)
+        # Extrai coordenadas e adiciona setas
         coords = rota['features'][0]['geometry']['coordinates']
         coords_latlng = [(lat, lng) for lng, lat in coords]
 
-        # Adiciona setas na rota para indicar direção
         PolyLineTextPath(
             linha,
             '▶',
             repeat=True,
-            offset=7,
-            attributes={'fill': cores[i % len(cores)], 'font-weight': 'bold', 'font-size': '16'}
+            spacing=40,  # espaçamento maior entre setas
+            offset=6,
+            attributes={
+                'fill': cores[i % len(cores)],
+                'font-weight': 'bold',
+                'font-size': '14'
+            }
         ).add_to(mapa)
 
         for idx, row in rota_df.iterrows():
