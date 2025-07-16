@@ -3,14 +3,14 @@ import pandas as pd
 import folium
 import openrouteservice
 from folium.features import DivIcon
-from folium.plugins import PolyLineTextPath
+from sklearn.cluster import KMeans
 from geopy.distance import geodesic
 import tempfile
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="🗺️ Rotas Automáticas")
 
-# Lê chave da API do secrets
+# Lê a chave do arquivo secrets.toml
 api_key = st.secrets["ors_api_key"]["key"]
 
 @st.cache_data
@@ -21,30 +21,6 @@ def carregar_escolas(caminho_csv):
     df["longitude"] = df["longitude"].astype(str).str.replace(",", ".").astype(float)
     df["exibir"] = df["codigo"].astype(str) + " - " + df["nome"]
     return df
-
-def calcular_distancia(coord1, coord2):
-    return geodesic(coord1, coord2).kilometers
-
-def distribuir_destinos_otimizado(partida, destinos_df, num_carros, capacidade):
-    destinos_restantes = destinos_df.copy()
-    carros_destinos = []
-
-    for _ in range(num_carros):
-        if destinos_restantes.empty:
-            break
-
-        # Calcula distância de cada destino à partida
-        destinos_restantes["distancia"] = destinos_restantes.apply(
-            lambda row: calcular_distancia((partida["latitude"], partida["longitude"]),
-                                           (row["latitude"], row["longitude"])), axis=1
-        )
-
-        # Seleciona os mais próximos
-        selecionados = destinos_restantes.nsmallest(capacidade - 1, "distancia")
-        carros_destinos.append(selecionados.copy())
-        destinos_restantes = destinos_restantes.drop(selecionados.index)
-
-    return carros_destinos
 
 if "mostrar_mapa" not in st.session_state:
     st.session_state["mostrar_mapa"] = False
@@ -64,7 +40,21 @@ with st.form("roteirizador"):
     capacidade = st.number_input("👥 Pessoas por carro (incluindo motorista)", min_value=1, max_value=10, value=4)
     gerar = st.form_submit_button("🔄 Gerar rota")
 
-def gerar_rotas_otimizadas(partida_exibir, destinos_exibir, num_carros, capacidade):
+def clusterizar_destinos(destinos_df, num_carros):
+    if len(destinos_df) <= num_carros:
+        return [destinos_df.iloc[[i]] for i in range(len(destinos_df))]
+
+    kmeans = KMeans(n_clusters=num_carros, random_state=42, n_init=10)
+    destinos_df["cluster"] = kmeans.fit_predict(destinos_df[["latitude", "longitude"]])
+
+    clusters = []
+    for i in range(num_carros):
+        grupo = destinos_df[destinos_df["cluster"] == i].copy()
+        clusters.append(grupo)
+
+    return clusters
+
+def gerar_rotas_com_cluster(partida_exibir, destinos_exibir, num_carros, capacidade):
     client = openrouteservice.Client(key=api_key)
 
     partida_codigo = int(partida_exibir.split(" - ")[0])
@@ -80,10 +70,11 @@ def gerar_rotas_otimizadas(partida_exibir, destinos_exibir, num_carros, capacida
     partida = escolas_df[escolas_df["codigo"] == partida_codigo].iloc[0]
     destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].copy()
 
-    destinos_por_carro = distribuir_destinos_otimizado(partida, destinos_df, num_carros, capacidade)
+    grupos = clusterizar_destinos(destinos_df, num_carros)
 
     mapa = folium.Map(location=[partida["latitude"], partida["longitude"]], zoom_start=13)
 
+    # Camada satélite
     folium.TileLayer(
         tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         attr='Esri',
@@ -97,11 +88,11 @@ def gerar_rotas_otimizadas(partida_exibir, destinos_exibir, num_carros, capacida
         "beige", "darkblue", "darkgreen"
     ]
 
-    for i, destinos_carro_df in enumerate(destinos_por_carro):
-        if destinos_carro_df.empty:
+    for i, grupo in enumerate(grupos):
+        if grupo.empty:
             continue
 
-        rota_df = pd.concat([pd.DataFrame([partida]), destinos_carro_df], ignore_index=True)
+        rota_df = pd.concat([pd.DataFrame([partida]), grupo], ignore_index=True)
         coordenadas = list(zip(rota_df["longitude"], rota_df["latitude"]))
 
         try:
@@ -118,22 +109,8 @@ def gerar_rotas_otimizadas(partida_exibir, destinos_exibir, num_carros, capacida
         linha = folium.GeoJson(
             rota,
             name=f"Rota Carro {i+1}",
-            style_function=lambda x, cor=cores[i % len(cores)]: {"color": cor, "weight": 5, "opacity": 0.7}
-        ).add_to(mapa)
-
-        coords = rota['features'][0]['geometry']['coordinates']
-        coords_latlng = [(lat, lng) for lng, lat in coords]
-
-        PolyLineTextPath(
-            linha,
-            '▶',
-            repeat=True,
-            spacing=40,  # espaçamento entre setas
-            offset=6,
-            attributes={
-                'fill': cores[i % len(cores)],
-                'font-weight': 'bold',
-                'font-size': '14'
+            style_function=lambda x, cor=cores[i % len(cores)]: {
+                "color": cor, "weight": 5, "opacity": 0.7
             }
         ).add_to(mapa)
 
@@ -161,7 +138,7 @@ if gerar:
     if not destinos_exibir:
         st.warning("Você precisa selecionar ao menos um destino.")
     else:
-        gerar_rotas_otimizadas(partida_exibir, destinos_exibir, num_carros, capacidade)
+        gerar_rotas_com_cluster(partida_exibir, destinos_exibir, num_carros, capacidade)
 
 if st.session_state["mostrar_mapa"] and st.session_state["mapa_html_path"] is not None:
     with open(st.session_state["mapa_html_path"], 'r', encoding='utf-8') as f:
