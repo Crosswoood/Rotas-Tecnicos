@@ -10,7 +10,7 @@ import math
 
 st.set_page_config(page_title="🗺️ Rotas Automáticas")
 
-# Pega a chave da API do ORS do secrets do Streamlit (configure no deploy)
+# Chave salva simples no Streamlit secrets:
 api_key = st.secrets["ors_api_key"]
 
 @st.cache_data
