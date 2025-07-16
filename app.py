@@ -6,19 +6,19 @@ from geopy.distance import geodesic
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from folium.features import DivIcon
 
-# ✅ Configuração do app
+# ✅ Configuração inicial
 st.set_page_config(page_title="Rotas Automáticas")
 
-# ✅ Leitura do CSV
+# ✅ Leitura do CSV com fallback de codificação
 try:
     escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="utf-8", sep=';')
 except UnicodeDecodeError:
     escolas_df = pd.read_csv("ESCOLAS-CAPITAL.csv", encoding="latin1", sep=';')
 
-# ✅ Padronização dos nomes das colunas
+# ✅ Padronizar nomes de colunas
 escolas_df.columns = escolas_df.columns.str.strip().str.lower()
 
-# ✅ Verificação de colunas
+# ✅ Verificar colunas obrigatórias
 colunas_esperadas = ["inep", "escola", "latitude", "longitude"]
 faltando = [col for col in colunas_esperadas if col not in escolas_df.columns]
 if faltando:
@@ -31,27 +31,29 @@ escolas_df = escolas_df.rename(columns={
     "escola": "nome"
 })
 
-# ✅ Converter coordenadas
+# ✅ Converter latitude/longitude com vírgula
 escolas_df["latitude"] = escolas_df["latitude"].astype(str).str.replace(",", ".").astype(float)
 escolas_df["longitude"] = escolas_df["longitude"].astype(str).str.replace(",", ".").astype(float)
 
-# ✅ Criar campo para interface
+# ✅ Coluna auxiliar para interface
 escolas_df["exibir"] = escolas_df["codigo"].astype(str) + " - " + escolas_df["nome"]
 
-# ✅ Título da interface
+# ✅ Título principal
 st.title("🗺️ Rotas Automáticas")
 
-# ✅ Inicialização de estado
+# ✅ Inicializar estado do mapa
 if "mostrar_mapa" not in st.session_state:
     st.session_state["mostrar_mapa"] = False
 
-# ✅ Interface
-partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
-destinos_exibir = st.multiselect("🎯 Escolas de destino", escolas_df["exibir"].tolist())
-num_carros = st.number_input("🚐 Número de carros disponíveis", min_value=1, max_value=5, value=1)
-capacidade = st.number_input("👥 Pessoas por carro", min_value=1, max_value=10, value=4)
+# ✅ Formulário de entrada
+with st.form("roteirizador"):
+    partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
+    destinos_exibir = st.multiselect("🎯 Escolas de destino", escolas_df["exibir"].tolist())
+    num_carros = st.number_input("🚐 Número de carros disponíveis", min_value=1, max_value=5, value=1)
+    capacidade = st.number_input("👥 Pessoas por carro", min_value=1, max_value=10, value=4)
+    gerar = st.form_submit_button("🔄 Gerar rota")
 
-# ✅ Função para criar matriz de distância
+# ✅ Função para matriz de distâncias
 def create_distance_matrix(locations):
     n = len(locations)
     matrix = []
@@ -63,9 +65,9 @@ def create_distance_matrix(locations):
         matrix.append(row)
     return matrix
 
-# ✅ Geração de rota
-if st.button("🔄 Gerar rota"):
-    st.session_state["mostrar_mapa"] = False  # Reinicia estado
+# ✅ Processamento após clique
+if gerar:
+    st.session_state["mostrar_mapa"] = False
 
     if not destinos_exibir:
         st.warning("Você precisa selecionar ao menos um destino.")
@@ -118,7 +120,7 @@ if st.button("🔄 Gerar rota"):
                     coord = locations[node_index]
                     rota.append(coord)
                     index = solution.Value(routing.NextVar(index))
-                rota.append(locations[0])  # Volta ao início
+                rota.append(locations[0])  # retorno ao início
 
                 folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
 
@@ -139,6 +141,6 @@ if st.button("🔄 Gerar rota"):
         else:
             st.error("❌ Não foi possível gerar a rota com os parâmetros fornecidos.")
 
-# ✅ Exibir mapa somente após geração
+# ✅ Mostrar mapa somente se já gerado
 if st.session_state.get("mostrar_mapa", False):
     st_folium(st.session_state["mapa"], height=600)
