@@ -115,12 +115,12 @@ def gerar_rotas_multicarro(partida_exibir, destinos_exibir, num_carros, capacida
             linha,
             '▶',
             repeat=True,
-            spacing=40,  # espaçamento maior entre setas
+            spacing=100,  # espaçamento maior entre setas
             offset=6,
             attributes={
                 'fill': cores[i % len(cores)],
                 'font-weight': 'bold',
-                'font-size': '14'
+                'font-size': '15'
             }
         ).add_to(mapa)
 
