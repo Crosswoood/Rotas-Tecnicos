@@ -61,24 +61,35 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
     locations = list(zip(destinos_df["latitude"], destinos_df["longitude"]))
     distance_matrix = create_distance_matrix(tuple(locations))
 
-    manager = pywrapcp.RoutingIndexManager(len(distance_matrix), num_carros, 0)
+    # === Adiciona ponto virtual de fim ===
+    dummy_point = (0.0, 0.0)  # Não será usado realmente
+    all_locations = locations + [dummy_point]
+
+    starts = [0] * num_carros
+    ends = [len(locations)] * num_carros  # ponto fictício
+    manager = pywrapcp.RoutingIndexManager(len(all_locations), num_carros, starts, ends)
     routing = pywrapcp.RoutingModel(manager)
 
     def distance_callback(from_index, to_index):
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
+        if from_node >= len(distance_matrix) or to_node >= len(distance_matrix):
+            return 0
         return distance_matrix[from_node][to_node]
 
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    demands = [1] * len(distance_matrix)
+    demands = [1] * len(locations) + [0]
     vehicle_capacities = [capacidade] * num_carros
 
     demand_callback_index = routing.RegisterUnaryTransitCallback(lambda idx: demands[manager.IndexToNode(idx)])
     routing.AddDimensionWithVehicleCapacity(
         demand_callback_index, 0, vehicle_capacities, True, "Capacity"
     )
+
+    for i in range(num_carros):
+        routing.AddVariableMinimizedByFinalizer(routing.NextVar(manager.End(i)))
 
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -99,19 +110,17 @@ def gerar_rotas(partida_exibir, destinos_exibir, num_carros, capacidade):
         ordem_pontos = []
         while not routing.IsEnd(index):
             node_index = manager.IndexToNode(index)
-            rota.append(locations[node_index])
-            ordem_pontos.append(node_index)
+            if node_index < len(locations):  # ignora ponto virtual
+                rota.append(locations[node_index])
+                ordem_pontos.append(node_index)
             index = solution.Value(routing.NextVar(index))
-        node_index = manager.IndexToNode(index)
-        rota.append(locations[node_index])
-        ordem_pontos.append(node_index)
 
         folium.PolyLine(rota, color=cores[vehicle_id % len(cores)], weight=5, opacity=0.8).add_to(mapa)
 
         for i, idx in enumerate(ordem_pontos):
             coord = locations[idx]
             nome_escola = destinos_df.iloc[idx]["nome"]
-            numero_ponto = i  # Agora o ponto 0 será sempre o primeiro
+            numero_ponto = i
             folium.Marker(
                 location=coord,
                 icon=DivIcon(
