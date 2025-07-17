@@ -90,7 +90,7 @@ def gerar_rotas_com_sequencial(partida_exibir, destinos_exibir, num_carros, capa
     partida = escolas_df[escolas_df["codigo"] == partida_codigo].iloc[0]
     destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].copy()
 
-    capacidade_util = capacidade - 1  # Motorista ocupa 1 lugar
+    capacidade_util = capacidade # Motorista é um dos tecnicos
 
     grupos = clusterizar_sequencial(destinos_df, partida, num_carros, capacidade_util)
 
