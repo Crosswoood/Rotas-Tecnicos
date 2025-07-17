@@ -123,12 +123,19 @@ def gerar_rotas_com_veiculos(partida_exibir, destinos_exibir, veiculos):
         coordenadas = list(zip(rota_df["longitude"], rota_df["latitude"]))
 
         try:
-            rota = client.directions(
-                coordenadas,
-                profile='driving-car',
-                format='geojson',
-                optimize_waypoints=True
-            )
+            if len(coordenadas) >= 4:
+                rota = client.directions(
+                    coordenadas,
+                    profile='driving-car',
+                    format='geojson',
+                    optimize_waypoints=True
+                )
+            else:
+                rota = client.directions(
+                    coordenadas,
+                    profile='driving-car',
+                    format='geojson'
+                )
         except Exception as e:
             st.error(f"Erro ao solicitar rota para {veiculo['tipo']} {i+1}: {e}")
             continue
