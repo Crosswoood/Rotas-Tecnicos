@@ -61,7 +61,7 @@ def clusterizar_por_capacidades(destinos_df, veiculos):
 
     grupos_finais = []
     total_carros = sum(v["quantidade"] for v in veiculos)
-    kmeans = KMeans(n_clusters=min(total_carros, len(destinos_df)), random_state=1000, n_init=1000)
+    kmeans = KMeans(n_clusters=min(total_carros, len(destinos_df)), random_state=49, n_init=10)
     destinos_df["cluster"] = kmeans.fit_predict(destinos_df[["latitude", "longitude"]])
 
     grupos_por_cluster = []
