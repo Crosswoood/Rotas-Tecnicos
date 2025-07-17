@@ -148,9 +148,14 @@ def gerar_rotas_com_veiculos(partida_exibir, destinos_exibir, veiculos):
             }
         ).add_to(mapa)
 
-        way_points_order = rota['features'][0]['properties']['way_points']
+try:
+    way_points_order = rota['features'][0]['properties'].get('way_points', list(range(len(rota_df))))
+except Exception:
+    way_points_order = list(range(len(rota_df)))
 
 for step_num, idx in enumerate(way_points_order):
+    if idx >= len(rota_df):
+        continue  # Evita índice fora do intervalo
     row = rota_df.iloc[idx]
 
     folium.Marker(
