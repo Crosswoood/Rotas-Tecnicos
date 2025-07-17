@@ -148,28 +148,21 @@ def gerar_rotas_com_veiculos(partida_exibir, destinos_exibir, veiculos):
             }
         ).add_to(mapa)
 
-        steps = rota['features'][0]['properties']['segments'][0].get('steps', [])
-        ordered_coords = [step['way_points'][0] for step in steps if step['way_points'][0] < len(coordenadas)]
-        ordered_indices = [coordenadas[i] for i in ordered_coords]
+        way_points_order = rota['features'][0]['properties']['way_points']
 
-        coord_to_index = {tuple(coord): idx for idx, coord in enumerate(coordenadas)}
+for step_num, idx in enumerate(way_points_order):
+    row = rota_df.iloc[idx]
 
-        for step_num, coord in enumerate(ordered_indices):
-            index = coord_to_index.get(tuple(coord))
-            if index is None:
-                continue
+    folium.Marker(
+        location=(row["latitude"], row["longitude"]),
+        icon=DivIcon(
+            icon_size=(30, 30),
+            icon_anchor=(15, 15),
+            html=f'<div style="font-size: 14pt; color: {cores[i % len(cores)]}; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{step_num}</div>'
+        ),
+        tooltip=f"{veiculo['tipo']} {i+1} - {row['nome']}"
+    ).add_to(mapa)
 
-            row = rota_df.iloc[index]
-
-            folium.Marker(
-                location=(row["latitude"], row["longitude"]),
-                icon=DivIcon(
-                    icon_size=(30, 30),
-                    icon_anchor=(15, 15),
-                    html=f'<div style="font-size: 14pt; color: {cores[i % len(cores)]}; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{step_num}</div>'
-                ),
-                tooltip=f"{veiculo['tipo']} {i+1} - {row['nome']}"
-            ).add_to(mapa)
 
     folium.LayerControl().add_to(mapa)
 
