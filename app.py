@@ -61,7 +61,7 @@ def clusterizar_por_capacidades(destinos_df, veiculos):
 
     grupos_finais = []
     total_carros = sum(v["quantidade"] for v in veiculos)
-    kmeans = KMeans(n_clusters=min(total_carros, len(destinos_df)), random_state=49, n_init=10)
+    kmeans = KMeans(n_clusters=min(total_carros, len(destinos_df)), random_state=1000, n_init=1000)
     destinos_df["cluster"] = kmeans.fit_predict(destinos_df[["latitude", "longitude"]])
 
     grupos_por_cluster = []
@@ -141,13 +141,25 @@ def gerar_rotas_com_veiculos(partida_exibir, destinos_exibir, veiculos):
             }
         ).add_to(mapa)
 
-        for idx, row in rota_df.iterrows():
+        steps = rota['features'][0]['properties']['segments'][0]['steps']
+        ordered_coords = [step['way_points'][0] for step in steps]
+        ordered_indices = [coordenadas[i] for i in ordered_coords]
+
+        coord_to_index = {tuple(coord): idx for idx, coord in enumerate(coordenadas)}
+
+        for step_num, coord in enumerate(ordered_indices):
+            index = coord_to_index.get(tuple(coord))
+            if index is None:
+                continue
+
+            row = rota_df.iloc[index]
+
             folium.Marker(
                 location=(row["latitude"], row["longitude"]),
                 icon=DivIcon(
                     icon_size=(30, 30),
                     icon_anchor=(15, 15),
-                    html=f'<div style="font-size: 14pt; color: {cores[i % len(cores)]}; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{idx}</div>'
+                    html=f'<div style="font-size: 14pt; color: {cores[i % len(cores)]}; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{step_num}</div>'
                 ),
                 tooltip=f"{veiculo['tipo']} {i+1} - {row['nome']}"
             ).add_to(mapa)
