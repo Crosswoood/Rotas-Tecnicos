@@ -141,8 +141,8 @@ def gerar_rotas_com_veiculos(partida_exibir, destinos_exibir, veiculos):
             }
         ).add_to(mapa)
 
-        steps = rota['features'][0]['properties']['segments'][0]['steps']
-        ordered_coords = [step['way_points'][0] for step in steps]
+        steps = rota['features'][0]['properties']['segments'][0].get('steps', [])
+        ordered_coords = [step['way_points'][0] for step in steps if step['way_points'][0] < len(coordenadas)]
         ordered_indices = [coordenadas[i] for i in ordered_coords]
 
         coord_to_index = {tuple(coord): idx for idx, coord in enumerate(coordenadas)}
