@@ -45,7 +45,7 @@ def clusterizar_com_capacidade(destinos_df, num_carros, capacidade_util):
 
     # Limita número de clusters ao mínimo entre carros disponíveis e destinos
     n_clusters = min(num_carros, len(destinos_df))
-    kmeans = KMeans(n_clusters=n_clusters, random_state=1000, n_init=100)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=1000, n_init=1000)
     destinos_df["cluster"] = kmeans.fit_predict(destinos_df[["latitude", "longitude"]])
 
     grupos_finais = []
