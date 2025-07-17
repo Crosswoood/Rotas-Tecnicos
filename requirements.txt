@@ -1,8 +1,8 @@
 txt
 
 streamlit
-pandas
+streamlit-folium
 folium
+pandas
 openrouteservice
-geopy
 scikit-learn
