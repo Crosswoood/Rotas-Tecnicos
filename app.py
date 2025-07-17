@@ -1,140 +1,152 @@
 import streamlit as st
 import pandas as pd
 import folium
-from folium.plugins import MarkerCluster
-from streamlit_folium import st_folium
-from openrouteservice import Client
+import openrouteservice
+from folium.features import DivIcon
 from sklearn.cluster import KMeans
-from math import radians, cos, sin, sqrt, atan2
+import tempfile
+import streamlit.components.v1 as components
 
-# CONFIGURAÇÕES INICIAIS
-st.set_page_config(page_title="🗺️ Rotas Automáticas", layout="wide")
+st.set_page_config(page_title="🗺️ Rotas Automáticas")
 
-# CHAVE DA API ORS
+# Lê a chave do arquivo secrets.toml
 api_key = st.secrets["ors_api_key"]["key"]
-cliente_direcoes = Client(key=api_key)
 
-# FUNÇÃO DE DISTÂNCIA GEOGRÁFICA
-def distancia_geografica(p1, p2):
-    R = 6371.0
-    lat1, lon1 = radians(p1[0]), radians(p1[1])
-    lat2, lon2 = radians(p2[0]), radians(p2[1])
-    dlat, dlon = lat2 - lat1, lon2 - lon1
-    a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
-    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+@st.cache_data
+def carregar_escolas(caminho_csv):
+    df = pd.read_csv(caminho_csv, encoding="latin1", sep=";")
+    df.columns = df.columns.str.strip().str.lower()
+    df["latitude"] = df["latitude"].astype(str).str.replace(",", ".").astype(float)
+    df["longitude"] = df["longitude"].astype(str).str.replace(",", ".").astype(float)
+    df["exibir"] = df["codigo"].astype(str) + " - " + df["nome"]
+    return df
 
-# INTERFACE
-st.title("📍 Roteirização Otimizada de Escolas")
+if "mostrar_mapa" not in st.session_state:
+    st.session_state["mostrar_mapa"] = False
+if "mapa_html_path" not in st.session_state:
+    st.session_state["mapa_html_path"] = None
 
-arquivo = st.file_uploader("Faça upload da planilha com as escolas", type=["csv", "xlsx"])
-num_carros = st.number_input("Número de carros", min_value=1, step=1, value=2)
-capacidade_por_carro = st.text_input("Capacidade dos carros (separado por vírgulas)", value="10,10")
+escolas_df = carregar_escolas("ESCOLAS-CAPITAL.csv")
 
-if arquivo:
-    # LEITURA DOS DADOS
-    if arquivo.name.endswith(".csv"):
-        df = pd.read_csv(arquivo)
-    else:
-        df = pd.read_excel(arquivo)
+st.title("🗺️ Rotas Automáticas")
 
-    df.columns = df.columns.str.lower().str.strip()
-    obrigatorias = {"nome", "lat", "lng", "qtd_pessoas"}
-    if not obrigatorias.issubset(df.columns):
-        st.error(f"A planilha deve conter as colunas: {', '.join(obrigatorias)}")
-        st.stop()
+map_placeholder = st.empty()
 
-    capacidade = list(map(int, capacidade_por_carro.split(",")))
-    if len(capacidade) != num_carros:
-        st.error("Número de capacidades deve ser igual ao número de carros")
-        st.stop()
+with st.form("roteirizador"):
+    partida_exibir = st.selectbox("📍 Escolha o ponto de partida", escolas_df["exibir"].tolist())
+    destinos_exibir = st.multiselect("🌟 Escolas de destino", escolas_df["exibir"].tolist())
+    num_carros = st.number_input("🚘 Número de carros disponíveis", min_value=1, max_value=10, value=1)
+    capacidade = st.number_input("👥 Pessoas por carro (incluindo motorista)", min_value=2, max_value=10, value=4)
+    gerar = st.form_submit_button("🔄 Gerar rota")
 
-    df = df.copy()
-    df["lat"] = df["lat"].astype(float)
-    df["lng"] = df["lng"].astype(float)
-    df["qtd_pessoas"] = df["qtd_pessoas"].astype(int)
+def clusterizar_com_capacidade(destinos_df, num_carros, capacidade_util):
+    if len(destinos_df) == 0:
+        return []
 
-    # PONTO CENTRAL (INÍCIO DAS ROTAS)
-    centro_lat = df["lat"].mean()
-    centro_lng = df["lng"].mean()
-    ponto_inicial = (centro_lat, centro_lng)
+    # Limita número de clusters ao mínimo entre carros disponíveis e destinos
+    n_clusters = min(num_carros, len(destinos_df))
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    destinos_df["cluster"] = kmeans.fit_predict(destinos_df[["latitude", "longitude"]])
 
-    # ESCOLAS MAIS DISTANTES PARA O CARRO 1
-    df["distancia"] = df[["lat", "lng"]].apply(lambda row: distancia_geografica(ponto_inicial, (row["lat"], row["lng"])), axis=1)
-    df = df.sort_values(by="distancia", ascending=False)
+    grupos_finais = []
 
-    # ATRIBUI ESCOLAS AO CARRO 1 (PRIORIDADE PARA MAIS DISTANTES)
-    rotas_por_carro = {i: [] for i in range(num_carros)}
-    restantes = df.copy()
-    capacidade_restante = capacidade.copy()
+    for _, grupo in destinos_df.groupby("cluster"):
+        escolas = grupo.copy().reset_index(drop=True)
+        for i in range(0, len(escolas), capacidade_util):
+            grupos_finais.append(escolas.iloc[i:i + capacidade_util])
 
-    for idx, row in df.iterrows():
-        if capacidade_restante[0] >= row["qtd_pessoas"]:
-            rotas_por_carro[0].append(row)
-            capacidade_restante[0] -= row["qtd_pessoas"]
-            restantes = restantes.drop(idx)
+    return grupos_finais[:num_carros]  # só usa até o número de carros disponível
 
-    # DISTRIBUI ESCOLAS RESTANTES ENTRE OS OUTROS CARROS
-    for idx, row in restantes.iterrows():
-        alocado = False
-        for i in range(1, num_carros):
-            if capacidade_restante[i] >= row["qtd_pessoas"]:
-                rotas_por_carro[i].append(row)
-                capacidade_restante[i] -= row["qtd_pessoas"]
-                alocado = True
-                break
-        if not alocado:
-            st.warning(f"Não foi possível alocar a escola: {row['nome']}")
+def gerar_rotas_com_cluster_e_capacidade(partida_exibir, destinos_exibir, num_carros, capacidade):
+    client = openrouteservice.Client(key=api_key)
 
-    # CRIA O MAPA
-    m = folium.Map(location=[centro_lat, centro_lng], zoom_start=12, control_scale=True, tiles=None)
-    folium.TileLayer('cartodbpositron', name="Mapa Padrão").add_to(m)
-    folium.TileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-                     name='Satélite (Google)',
-                     attr='Google', overlay=False, control=True).add_to(m)
+    partida_codigo = int(partida_exibir.split(" - ")[0])
+    destinos_codigos = [int(item.split(" - ")[0]) for item in destinos_exibir]
 
-    # CORES PARA OS CARROS
-    cores = ["red", "blue", "green", "purple", "orange", "darkred", "lightblue"]
+    if partida_codigo in destinos_codigos:
+        destinos_codigos.remove(partida_codigo)
 
-    # ADICIONA ROTA E PONTOS NO MAPA
-    for carro_id, escolas in rotas_por_carro.items():
-        if not escolas:
+    if len(destinos_codigos) == 0:
+        st.error("❌ Selecione ao menos um destino além do ponto de partida.")
+        return
+
+    partida = escolas_df[escolas_df["codigo"] == partida_codigo].iloc[0]
+    destinos_df = escolas_df[escolas_df["codigo"].isin(destinos_codigos)].copy()
+
+    capacidade_util = capacidade - 1  # 1 pessoa é o motorista
+    grupos = clusterizar_com_capacidade(destinos_df, num_carros, capacidade_util)
+
+    mapa = folium.Map(location=[partida["latitude"], partida["longitude"]], zoom_start=13)
+
+    # Camada de satélite
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr='Esri',
+        name='Satélite',
+        overlay=False,
+        control=True
+    ).add_to(mapa)
+
+    cores = [
+        "blue", "green", "red", "purple", "orange", "darkred", "lightred",
+        "beige", "darkblue", "darkgreen"
+    ]
+
+    for i, grupo in enumerate(grupos):
+        if grupo.empty:
             continue
 
-        rota_df = pd.DataFrame(escolas)
-        coords = [(row["lng"], row["lat"]) for _, row in rota_df.iterrows()]
+        rota_df = pd.concat([pd.DataFrame([partida]), grupo], ignore_index=True)
+        coordenadas = list(zip(rota_df["longitude"], rota_df["latitude"]))
 
         try:
-            rota = cliente_direcoes.directions(
-                coordinates=coords,
+            rota = client.directions(
+                coordenadas,
                 profile='driving-car',
                 format='geojson',
                 optimize_waypoints=True
             )
-
-            way_points_order = rota['features'][0]['properties'].get('way_points', list(range(len(rota_df))))
-
-            for step_num, idx in enumerate(way_points_order):
-                if idx >= len(rota_df):
-                    continue
-                row = rota_df.iloc[idx]
-                folium.Marker(
-                    location=[row["lat"], row["lng"]],
-                    popup=f"{row['nome']} ({row['qtd_pessoas']} pessoas)",
-                    icon=folium.Icon(color=cores[carro_id % len(cores)], icon="graduation-cap", prefix="fa")
-                ).add_to(m)
-
-            folium.GeoJson(
-                rota,
-                name=f"Rota Carro {carro_id + 1}",
-                style_function=lambda x, cid=carro_id: {
-                    "color": cores[cid % len(cores)],
-                    "weight": 5,
-                    "opacity": 0.8
-                }
-            ).add_to(m)
-
         except Exception as e:
-            st.error(f"Erro ao solicitar rota para Carro {carro_id + 1}: {e}")
+            st.error(f"Erro ao solicitar rota para Carro {i+1}: {e}")
+            continue
 
-    folium.LayerControl().add_to(m)
-    st_folium(m, width=1200, height=700)
+        linha = folium.GeoJson(
+            rota,
+            name=f"Rota Carro {i+1}",
+            style_function=lambda x, cor=cores[i % len(cores)]: {
+                "color": cor, "weight": 5, "opacity": 0.7
+            }
+        ).add_to(mapa)
+
+        for idx, row in rota_df.iterrows():
+            folium.Marker(
+                location=(row["latitude"], row["longitude"]),
+                icon=DivIcon(
+                    icon_size=(30, 30),
+                    icon_anchor=(15, 15),
+                    html=f'<div style="font-size: 14pt; color: {cores[i % len(cores)]}; font-weight: bold; background: white; border-radius: 50%; width: 30px; height: 30px; text-align: center; line-height: 30px;">{idx}</div>'
+                ),
+                tooltip=f"Carro {i+1} - {row['nome']}"
+            ).add_to(mapa)
+
+    folium.LayerControl().add_to(mapa)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".html", dir=".") as tmpfile:
+        mapa.save(tmpfile.name)
+        st.session_state["mapa_html_path"] = tmpfile.name
+
+    st.session_state["mostrar_mapa"] = True
+    st.success(f"✅ Rotas otimizadas geradas com sucesso para até {num_carros} carro(s)!")
+
+if gerar:
+    if not destinos_exibir:
+        st.warning("Você precisa selecionar ao menos um destino.")
+    else:
+        gerar_rotas_com_cluster_e_capacidade(partida_exibir, destinos_exibir, num_carros, capacidade)
+
+if st.session_state["mostrar_mapa"] and st.session_state["mapa_html_path"] is not None:
+    with open(st.session_state["mapa_html_path"], 'r', encoding='utf-8') as f:
+        mapa_html = f.read()
+    components.html(mapa_html, height=600, scrolling=True)
+else:
+    map_placeholder.write("O mapa aparecerá aqui após você gerar uma rota.")
