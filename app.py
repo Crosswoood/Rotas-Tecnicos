@@ -3,8 +3,6 @@ import pandas as pd
 import folium
 import openrouteservice
 from folium.features import DivIcon
-from sklearn.cluster import KMeans
-from scipy.spatial.distance import cdist
 import numpy as np
 import tempfile
 import streamlit.components.v1 as components
@@ -41,57 +39,42 @@ with st.form("roteirizador"):
     capacidade = st.number_input("👥 Pessoas por carro (incluindo motorista)", min_value=2, max_value=10, value=4)
     gerar = st.form_submit_button("🔄 Gerar rota")
 
-
-def clusterizar_com_capacidade(destinos_df, num_carros, capacidade_util, partida):
+def clusterizar_sequencial(destinos_df, partida, num_carros, capacidade_util):
     if len(destinos_df) == 0:
         return []
 
-    # Clusters iniciais
-    n_clusters = min(num_carros, len(destinos_df))
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-    destinos_df["cluster"] = kmeans.fit_predict(destinos_df[["latitude", "longitude"]])
+    destinos_restantes = destinos_df.copy().reset_index(drop=True)
+    grupos = []
 
-    blocos = []
-    for _, grupo in destinos_df.groupby("cluster"):
-        escolas = grupo.copy().reset_index(drop=True)
-        for i in range(0, len(escolas), capacidade_util):
-            blocos.append(escolas.iloc[i:i + capacidade_util])
+    for carro in range(num_carros):
+        grupo = []
+        ponto_atual = np.array([partida["latitude"], partida["longitude"]])
 
-    if len(blocos) <= num_carros:
-        return blocos
+        while len(destinos_restantes) > 0 and len(grupo) < capacidade_util:
+            destinos_coords = destinos_restantes[["latitude", "longitude"]].values
+            distancias = np.linalg.norm(destinos_coords - ponto_atual, axis=1)
+            idx_mais_proximo = np.argmin(distancias)
 
-    # Se sobrar blocos, redistribui blocos extras para blocos principais
-    blocos_finais = blocos[:num_carros]
-    blocos_extras = blocos[num_carros:]
+            destino_mais_proximo = destinos_restantes.iloc[idx_mais_proximo]
+            grupo.append(destino_mais_proximo)
 
-    for extra in blocos_extras:
-        # Centroide do bloco extra
-        centro_extra = np.array([
-            extra["latitude"].mean(),
-            extra["longitude"].mean()
-        ])
+            destinos_restantes = destinos_restantes.drop(destinos_restantes.index[idx_mais_proximo]).reset_index(drop=True)
+            ponto_atual = np.array([destino_mais_proximo["latitude"], destino_mais_proximo["longitude"]])
 
-        centros_finais = [
-            np.array([
-                bloco["latitude"].mean(),
-                bloco["longitude"].mean()
-            ])
-            for bloco in blocos_finais
-        ]
+        if grupo:
+            grupos.append(pd.DataFrame(grupo))
 
-        distancias = cdist([centro_extra], centros_finais)[0]
-        indice_mais_proximo = np.argmin(distancias)
+    if len(destinos_restantes) > 0:
+        st.error(
+            f"❌ Faltaram carros! Ainda restam {len(destinos_restantes)} destinos sem carro suficiente "
+            f"para capacidade de {capacidade_util} passageiros por carro. "
+            f"Aumente o número de carros ou a capacidade."
+        )
+        return []
 
-        blocos_finais[indice_mais_proximo] = pd.concat(
-            [blocos_finais[indice_mais_proximo], extra]
-        ).reset_index(drop=True)
+    return grupos
 
-    st.warning(f"⚠️ Alguns grupos foram redistribuídos para garantir que todos os destinos sejam usados!")
-
-    return blocos_finais
-
-
-def gerar_rotas_com_cluster_e_capacidade(partida_exibir, destinos_exibir, num_carros, capacidade):
+def gerar_rotas_com_sequencial(partida_exibir, destinos_exibir, num_carros, capacidade):
     client = openrouteservice.Client(key=api_key)
 
     partida_codigo = int(partida_exibir.split(" - ")[0])
@@ -109,11 +92,13 @@ def gerar_rotas_com_cluster_e_capacidade(partida_exibir, destinos_exibir, num_ca
 
     capacidade_util = capacidade - 1  # Motorista ocupa 1 lugar
 
-    grupos = clusterizar_com_capacidade(destinos_df, num_carros, capacidade_util, partida)
+    grupos = clusterizar_sequencial(destinos_df, partida, num_carros, capacidade_util)
+
+    if not grupos:
+        return  # Se deu erro, não continua
 
     mapa = folium.Map(location=[partida["latitude"], partida["longitude"]], zoom_start=13)
 
-    # Camada de satélite
     folium.TileLayer(
         tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         attr='Esri',
@@ -171,14 +156,13 @@ def gerar_rotas_com_cluster_e_capacidade(partida_exibir, destinos_exibir, num_ca
         st.session_state["mapa_html_path"] = tmpfile.name
 
     st.session_state["mostrar_mapa"] = True
-    st.success(f"✅ Rotas geradas com sucesso! Todos os destinos foram alocados.")
-
+    st.success(f"✅ Rotas geradas com sucesso! Todas as escolas foram atendidas dentro da capacidade dos carros.")
 
 if gerar:
     if not destinos_exibir:
         st.warning("Você precisa selecionar ao menos um destino.")
     else:
-        gerar_rotas_com_cluster_e_capacidade(partida_exibir, destinos_exibir, num_carros, capacidade)
+        gerar_rotas_com_sequencial(partida_exibir, destinos_exibir, num_carros, capacidade)
 
 if st.session_state["mostrar_mapa"] and st.session_state["mapa_html_path"] is not None:
     with open(st.session_state["mapa_html_path"], 'r', encoding='utf-8') as f:
